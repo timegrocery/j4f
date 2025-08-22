@@ -1,5 +1,5 @@
 {
-  "active_modules": ["base64", "rot13", "super_rot"],
+  "active_modules": ["base64", "rot13", "super_rot", "base58"],
   "global": {
     "top_k": 10,
     "total_budget_s": 600,
@@ -27,6 +27,17 @@
       "modes": ["decode", "encode"],
       "orders": ["LTR", "RTL"],
       "budget_s": 60.0
+    },
+    "base58": {
+      "alphabets": ["bitcoin"],
+      "check_modes": ["none","b58check"],
+      "nested_passes": 1,
+      "budget_s": 5.0,
+      "scan_substrings": true,
+      "min_token_len": 10,
+      "aggressive_salvage": true,
+      "periodic_max_k": 6,
+      "min_plain_len": 6
     }
   }
 }

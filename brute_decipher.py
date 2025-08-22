@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List
 from modules.common import snake_from_camel, smart_hint
 
+
 # ---------- load config ----------
 def load_config(path: Path) -> dict:
     if not path.exists():
@@ -22,7 +23,6 @@ def load_config(path: Path) -> dict:
 def print_candidates(cands, top_k: int, show_hint_mode: str = "auto"):
     if not cands:
         print("No candidates produced."); return
-    print("\n=== Top candidates ===")
     for i, c in enumerate(cands[:top_k], 1):
         print(f"[{i}] score={c.score:.3f}  algo={c.algo:<10} {c.params}")
         print(f"     raw:   {c.text}")
@@ -48,6 +48,7 @@ def main():
     active = cfg.get("active_modules", [])
     mod_cfgs = cfg.get("modules", {})
     glob = cfg.get("global", {})
+    show_hint_mode = (glob.get("show_hint", "auto")).lower()
     top_k = args.top if args.top is not None else int(glob.get("top_k", 10))
     total_budget_s = float(glob.get("total_budget_s", 600.0))
 
@@ -75,7 +76,7 @@ def main():
         try:
             # Each module must expose: run(ciphertext: str, config: dict) -> List[Candidate]
             out = module.run(ciphertext, mc)
-            print(f"[diag] module '{name}' returned {len(out)} candidates")
+            #print(f"[diag] module '{name}' returned {len(out)} candidates")
             results.extend(out)
         except Exception as e:
             print(f"[!] Module '{name}' raised an error: {e}", file=sys.stderr)
@@ -87,7 +88,7 @@ def main():
             break
 
     ranked = dedupe_and_rank(results)
-    print_candidates(ranked, top_k)
+    print_candidates(ranked, top_k, show_hint_mode)
 
 if __name__ == "__main__":
     main()
