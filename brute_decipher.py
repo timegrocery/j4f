@@ -9,6 +9,7 @@ Usage:
 import argparse, importlib, json, sys, time, traceback
 from pathlib import Path
 from typing import List
+from modules.common import snake_from_camel, smart_hint
 
 # ---------- load config ----------
 def load_config(path: Path) -> dict:
@@ -18,18 +19,22 @@ def load_config(path: Path) -> dict:
         return json.load(f)
 
 # ---------- pretty print ----------
-def print_candidates(cands, top_k: int):
-    from modules.common import snake_from_camel
+def print_candidates(cands, top_k: int, show_hint_mode: str = "auto"):
     if not cands:
-        print("No candidates produced.")
-        return
+        print("No candidates produced."); return
     print("\n=== Top candidates ===")
     for i, c in enumerate(cands[:top_k], 1):
-        snake = snake_from_camel(c.text)
         print(f"[{i}] score={c.score:.3f}  algo={c.algo:<10} {c.params}")
         print(f"     raw:   {c.text}")
-        if snake != c.text.lower():
-            print(f"     snake: {snake}")
+        if show_hint_mode != "never":
+            if show_hint_mode == "always":
+                # legacy behavior (not recommended): always show snake
+                print(f"     snake: {snake_from_camel(c.text)}")
+            else:
+                hint = smart_hint(c.text)  # ('snake', val) or ('lower', val) or None
+                if hint:
+                    label, val = hint
+                    print(f"     {label}: {val}")
         print()
 
 def main():
@@ -70,6 +75,7 @@ def main():
         try:
             # Each module must expose: run(ciphertext: str, config: dict) -> List[Candidate]
             out = module.run(ciphertext, mc)
+            print(f"[diag] module '{name}' returned {len(out)} candidates")
             results.extend(out)
         except Exception as e:
             print(f"[!] Module '{name}' raised an error: {e}", file=sys.stderr)

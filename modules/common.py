@@ -1,5 +1,5 @@
 # modules/common.py
-import string, time
+import string, time, re
 from dataclasses import dataclass
 from typing import List
 
@@ -22,14 +22,99 @@ def _charclass_score(t: str) -> float:
     digit_prop  = digits  / n
     other_prop  = others  / n
     score = 0.0
-    # Prefer plaintext-like: mostly letters and a bit of space/underscore/hyphen
+    # Prefer plaintext-like: mostly letters + a bit of separators
     score += letter_prop * 2.2
     score -= digit_prop  * 0.9
     score -= other_prop  * 2.2
-    # Base64 padding in non-base contexts is a red flag
-    if "==" in t: score -= 0.8
+    # base64 padding is suspicious outside of base decoders
+    if "==" in t: score -= 1.5
     return score
 
+def _control_penalty(t: str) -> float:
+    ctrls = sum(((ord(c) < 32) and c not in '\n\t\r') or (ord(c) == 127) for c in t)
+    return -min(3.0, ctrls * 0.9)
+
+def _wordness_score(t: str) -> float:
+    """
+    Tokenize by common flag separators, reward multiple alphabetic words and natural vowels.
+    No heavy dictionaries; just structure + vowel share.
+    """
+    s = t.replace('_',' ').replace('+',' ').replace('-',' ').replace('/',' ')
+    toks = re.findall(r"[A-Za-z]{3,}", s)  # words >=3 letters
+    if not toks: return 0.0
+    vowels = set("aeiouAEIOU")
+    # token count matters, and vowels-per-token ~ natural language
+    tok_score = len(toks) * 0.8
+    vowel_score = 0.0
+    for w in toks:
+        v = sum(ch in vowels for ch in w) / max(1, len(w))
+        # reward vowel ratio around 35–55%
+        vowel_score += max(0.0, 1.0 - abs(v - 0.45) / 0.45)
+    vowel_score *= 0.5
+    return tok_score + vowel_score
+
+def _tail_noise_penalty(t: str) -> float:
+    toks = re.findall(r"[A-Za-z0-9\+\-_]+", t)
+    if not toks: 
+        return 0.0
+    last = toks[-1]
+    # penalize short, all-caps tails (e.g., 'VV', 'VVV')
+    if re.fullmatch(r"[A-Z]{2,5}", last):
+        return -1.0
+    return 0.0
+
+def _case_boundaries(s: str) -> int:
+    # count lower->Upper boundaries, the ones we would split on for camelCase
+    return sum(1 for i in range(1, len(s)) if s[i-1].islower() and s[i].isupper())
+
+def _wordness_quick(t: str) -> float:
+    # lightweight "does this look like words?" score (no dict)
+    # count alpha words (>=3 chars) + vowel reasonableness
+    tokens = re.findall(r"[A-Za-z]{3,}", t)
+    if not tokens: return 0.0
+    vset = set("aeiouAEIOU")
+    vowel_part = 0.0
+    for w in tokens:
+        vr = sum(c in vset for c in w) / max(1, len(w))
+        vowel_part += max(0.0, 1.0 - abs(vr - 0.45)/0.45)
+    return len(tokens)*0.5 + vowel_part*0.3
+
+def smart_hint(text: str):
+    """
+    Returns (label, hint) or None.
+    label ∈ {'snake','lower'}
+    """
+    raw = text
+    lower = raw.lower()
+    snake = snake_from_camel(raw)
+
+    # how "alternating" is it, measured by camel boundaries density?
+    boundaries = _case_boundaries(raw)
+    density = boundaries / max(1, len(raw))
+
+    # quick readability estimates
+    raw_score   = _wordness_quick(lower) + ngram_hits(lower)
+    snake_score = _wordness_quick(snake) + ngram_hits(snake)
+
+    # if very alternating (lots of flips), prefer lower; snake would be noisy
+    if density > 0.40:  # ~ every other char flips case
+        # only show if clearly helps vs raw
+        if raw_score >= 0.6:
+            return ("lower", lower)
+        else:
+            return None
+
+    # otherwise it might be true CamelCase; consider snake if it helps
+    # also avoid super underscore-y outputs
+    if snake.count('_') <= len(snake)//3 and snake_score >= raw_score + 0.2:
+        return ("snake", snake)
+
+    # fall back: if lower obviously better than raw
+    if raw_score >= 0.6:
+        return ("lower", lower)
+
+    return None
+    
 # ---- Candidate ----
 @dataclass
 class Candidate:
@@ -92,14 +177,43 @@ def snake_from_camel(s: str) -> str:
     return "".join(out).lower()
 
 def fitness(t: str) -> float:
+    # Base language signals
+    chi  = chi_square_english(t)
+    ic   = index_of_coincidence(t)
+    ngr  = ngram_hits(t)
+    cls  = _charclass_score(t)
+    wrd  = _wordness_score(t)
+    ctlp = _control_penalty(t)
+
+    n = len(t)
+    # Length factor: short strings shouldn't dominate. Saturate at 16 chars.
+    len_fac = min(1.0, n / 16.0)
+
     base = 0.0
-    base += chi_square_english(t) * 3.0
-    base += index_of_coincidence(t) * 2.5
-    base += ngram_hits(t) * 1.2
+    # Scale most metrics by length factor
+    base += (chi * 3.0 + ic * 2.5 + ngr * 1.2 + cls * 1.3) * len_fac
+    base += wrd * 0.6 * len_fac
+
+    # Small bonus for explicit word separators
+    base += (t.count(' ') + t.count('_') + t.count('+')) * 0.15
+
+    # Very short outputs are rarely the answer
+    if n < 4:  base -= (4 - n) * 2.0
+    if n <= 2: base -= 4.0
+
+    # Control characters are a strong negative signal
+    base += ctlp
+
+    # Downweight non-printables overall
+    if not is_mostly_printable(t):
+        base *= 0.6
+
+    # CamelCase helper stays as a side-signal (split to snake and re-score n-grams lightly)
     snake = snake_from_camel(t)
-    if snake != t.lower(): base += ngram_hits(snake) * 0.8
-    base += (t.count(' ')+t.count('_')) * 0.1
-    if not is_mostly_printable(t): base *= 0.5
+    if snake != t.lower():
+        base += ngram_hits(snake) * 0.6 * len_fac
+
+    base += _tail_noise_penalty(t)
     return base
 
 def dedupe_and_rank(cands: List[Candidate]) -> List[Candidate]:
@@ -127,7 +241,7 @@ def fitness(t: str) -> float:
     base += chi_square_english(t) * 3.0
     base += index_of_coincidence(t) * 2.5
     base += ngram_hits(t) * 1.2
-    base += _charclass_score(t) * 1.3   # <-- NEW: character-class weighting
+    base += _charclass_score(t) * 1.3   # <--- add this
     snake = snake_from_camel(t)
     if snake != t.lower(): base += ngram_hits(snake) * 0.8
     base += (t.count(' ')+t.count('_')) * 0.1

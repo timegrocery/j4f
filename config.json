@@ -2,15 +2,21 @@
   "active_modules": ["base64", "rot13", "super_rot"],
   "global": {
     "top_k": 10,
-    "total_budget_s": 600
+    "total_budget_s": 600,
+    "show_hint": "auto"
   },
   "modules": {
     "base64": {
       "nested_passes": 1,
       "budget_s": 5.0,
       "scan_substrings": true,
-      "min_token_len": 16,
-      "allow_urlsafe": true
+      "min_token_len": 12,
+      "allow_urlsafe": true,
+      "aggressive_salvage": true,
+      "periodic_max_k": 6,
+      "digit_combo_k": 2,
+      "kgram_lengths": [2,3],
+      "kgram_topk": 6
     },
     "rot13": {
       "n": 13,
