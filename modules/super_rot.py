@@ -3,8 +3,30 @@ from typing import List
 from .common import Candidate, fitness, shift_char
 import re, time
 
-_B64ISH_STD  = re.compile(r'^[A-Za-z0-9+/]+={0,2}$')
-_B64ISH_URL  = re.compile(r'^[A-Za-z0-9\-_]+={0,2}$')
+_RE_B64ISH  = re.compile(r'^[A-Za-z0-9+/]{12,}(?:==|=)?$')
+_RE_B64URL  = re.compile(r'^[A-Za-z0-9_-]{12,}(?:==|=)?$')
+_RE_B58ISH  = re.compile(r'^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{12,}$')
+_RE_B45ISH = re.compile(r'^[0-9A-Z $%*+\-./:]{12,}$')
+_B91_ALPH = r'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@\[\]^_`{|}~"'
+_RE_B91ISH = re.compile(rf'^[{_B91_ALPH}]{{12,}}$')
+
+def _encoding_shape_penalty(s: str) -> float:
+    pen = 0.0
+    if _RE_B64ISH.fullmatch(s) or _RE_B64URL.fullmatch(s):
+        pen += 6.0
+        if s.endswith('=') or s.endswith('=='): pen += 2.0
+    if _RE_B58ISH.fullmatch(s):
+        pen += 3.0
+    # NEW:
+    if _RE_B45ISH.fullmatch(s):
+        pen += 2.5
+    if _RE_B91ISH.fullmatch(s):
+        pen += 2.5
+    if len(s) >= 16 and ' ' not in s:
+        digits = sum(c.isdigit() for c in s)
+        if digits / len(s) >= 0.25:
+            pen += 1.0
+    return pen
 
 def _progressive_transform(s: str, start=0, step=1, mode='decode', order='LTR') -> str:
     n=len(s); sign = -1 if mode=='decode' else 1
@@ -55,12 +77,9 @@ def run(ciphertext: str, config: dict) -> List[Candidate]:
                         return results
                     t = _progressive_transform(ciphertext, start=start_key, step=step, mode=mode, order=order)
                     sc = fitness(t)
-                    # Prefer real base decoders over super-rot outputs that look like base64(-url)
-                    if _B64ISH_STD.match(t) or _B64ISH_URL.match(t):
-                        sc -= 2.0
-                        if t.endswith("=="):
-                            sc -= 1.0
-                    # -------------- MISSING LINE (now added) --------------
+                    sc -= _encoding_shape_penalty(t)
+                    sc -= float(config.get("general_malus", 1.2))  # small across-the-board malus
+
                     results.append(
                         Candidate(
                             "super_rot",

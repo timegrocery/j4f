@@ -1,9 +1,10 @@
 {
-  "active_modules": ["base64", "rot13", "super_rot", "base58"],
+  "active_modules": ["base64", "rot13", "super_rot", "base58", "base45", "base91"],
   "global": {
     "top_k": 10,
     "total_budget_s": 600,
-    "show_hint": "auto"
+    "show_hint": "auto",
+    "per_algo_cap": 10
   },
   "modules": {
     "base64": {
@@ -16,7 +17,8 @@
       "periodic_max_k": 6,
       "digit_combo_k": 2,
       "kgram_lengths": [2,3],
-      "kgram_topk": 6
+      "kgram_topk": 6,
+      "leet_shadow_bonus": true
     },
     "rot13": {
       "n": 13,
@@ -26,6 +28,7 @@
       "max_abs_step": 5,
       "modes": ["decode", "encode"],
       "orders": ["LTR", "RTL"],
+      "general_malus": 1.0,
       "budget_s": 60.0
     },
     "base58": {
@@ -38,6 +41,8 @@
       "aggressive_salvage": true,
       "periodic_max_k": 6,
       "min_plain_len": 6
-    }
+    },
+    "base45": { "budget_s": 5.0, "scan_substrings": true, "min_token_len": 6, "periodic_max_k": 6, "min_plain_len": 6 },
+    "base91": { "budget_s": 5.0, "scan_substrings": true, "min_token_len": 8, "periodic_max_k": 6, "min_plain_len": 6 }
   }
 }

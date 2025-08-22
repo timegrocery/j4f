@@ -13,6 +13,24 @@ B64_ALLOWED_STD  = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123
 B64_ALLOWED_URL  = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=")
 ALLOWED_PRINT    = " _-.,:;!?/|()[]{}'\"\\"
 MIN_PLAIN_LEN = 6
+_LEET_UNMAP = str.maketrans({
+    '0': 'o', '1': 'l', '2': 'z', '3': 'e', '4': 'a',
+    '5': 's', '6': 'g', '7': 't', '8': 'b', '9': 'g',
+    '|': 'l', '!': 'i', '$': 's', '@': 'a'
+})
+
+def _leet_shadow_bonus(text: str) -> float:
+    """
+    If de-leeting the text makes it look more language-like, give a small bonus.
+    Conservative cap so it can't overwhelm other signals.
+    """
+    shadow = text.translate(_LEET_UNMAP)
+    # reuse fitness for a relative nudging; clamp to [0, 1.2]
+    try:
+        gain = max(0.0, fitness(shadow) - fitness(text))
+    except Exception:
+        gain = 0.0
+    return min(1.2, 0.6 * gain)
 
 def _path_penalty(path: str) -> float:
     # Favor raw/simple paths; penalize heavy salvage/nesting
@@ -20,7 +38,7 @@ def _path_penalty(path: str) -> float:
         return 0.0
     pen = 0.0
     if "keep_" in path:         pen += 0.40
-    if "rm_" in path:           pen += 1.20   # any removal is suspect
+    if "rm_" in path:           pen += 1.80   # any removal is suspect
     if "->base64->" in path:    pen += 0.60   # nested decodes
     if "->a85" in path or "->b85" in path:
                                  pen += 0.60
@@ -109,7 +127,8 @@ def _scan_tokens(s: str, min_len: int = 12, allow_urlsafe: bool = True):
     return tokens
 
 def _add_candidate(results, path: str, t: str, drop_ratio: float = 0.0):
-    sc = fitness(t) + _module_bonus(t) - min(2.0, drop_ratio * 3.0) - _path_penalty(path)
+    sc = (fitness(t) + _module_bonus(t) + _leet_shadow_bonus(t)
+      - min(2.0, drop_ratio * 3.0) - _path_penalty(path))
     results.append(Candidate("base", f"path={path}", t, sc))
 
 # ---- NEW: aggressive salvage helpers ----
@@ -168,7 +187,7 @@ def run(ciphertext: str, config: dict) -> List[Candidate]:
             if time_up(): return
             plain = _to_text(b, min_len=int(config.get("min_plain_len", MIN_PLAIN_LEN)))
             if plain:
-                _add_candidate(results, path, plain, drop_ratio)
+                _add_candidate(results, f"{path}->{name}", plain, drop_ratio)
                 # nested passes
                 queue = [(plain, f"{path}->{name}")]
                 for _ in range(nested):
@@ -176,7 +195,7 @@ def run(ciphertext: str, config: dict) -> List[Candidate]:
                     next_q=[]
                     for s2, p2 in queue:
                         for name2, b2 in _decode_once(s2.strip()):
-                            t2 = _to_text(b2)
+                            t2 = _to_text(b2, min_len=int(config.get("min_plain_len", MIN_PLAIN_LEN)))
                             if t2:
                                 _add_candidate(results, f"{p2}->{name2}", t2, drop_ratio)
                                 next_q.append((t2, f"{p2}->{name2}"))
@@ -272,7 +291,7 @@ def run(ciphertext: str, config: dict) -> List[Candidate]:
                     if time_up(): return results
                     try:
                         out = fn(_autopad(repaired))
-                        t = _to_text(out)
+                        t = _to_text(out, min_len=int(config.get("min_plain_len", MIN_PLAIN_LEN)))
                         if t:
                             _add_candidate(results, f"scan[{kind}@{a}:{b}]->{name}", t)
                             # nested passes
@@ -282,7 +301,7 @@ def run(ciphertext: str, config: dict) -> List[Candidate]:
                                 next_q=[]
                                 for s2, path in queue:
                                     for name2, b2 in _decode_once(s2.strip()):
-                                        t2 = _to_text(b2)
+                                        t2 = _to_text(b2, min_len=int(config.get("min_plain_len", MIN_PLAIN_LEN)))
                                         if t2:
                                             _add_candidate(results, f"{path}->{name2}", t2)
                                             next_q.append((t2, f"{path}->{name2}"))

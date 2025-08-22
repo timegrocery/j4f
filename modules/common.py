@@ -22,12 +22,10 @@ def _charclass_score(t: str) -> float:
     digit_prop  = digits  / n
     other_prop  = others  / n
     score = 0.0
-    # Prefer plaintext-like: mostly letters + a bit of separators
     score += letter_prop * 2.2
     score -= digit_prop  * 0.9
     score -= other_prop  * 2.2
-    # base64 padding is suspicious outside of base decoders
-    if "==" in t: score -= 1.5
+    if "==" in t: score -= 1.5  # b64 padding outside base modules is suspicious
     return score
 
 def _control_penalty(t: str) -> float:
@@ -36,29 +34,26 @@ def _control_penalty(t: str) -> float:
 
 def _wordness_score(t: str) -> float:
     """
-    Tokenize by common flag separators, reward multiple alphabetic words and natural vowels.
-    No heavy dictionaries; just structure + vowel share.
+    Tokenize by common separators; reward multiple alphabetic words and “natural” vowels.
+    Light-weight, dictionary-free.
     """
     s = t.replace('_',' ').replace('+',' ').replace('-',' ').replace('/',' ')
-    toks = re.findall(r"[A-Za-z]{3,}", s)  # words >=3 letters
+    toks = re.findall(r"[A-Za-z]{3,}", s)
     if not toks: return 0.0
     vowels = set("aeiouAEIOU")
-    # token count matters, and vowels-per-token ~ natural language
     tok_score = len(toks) * 0.8
     vowel_score = 0.0
     for w in toks:
         v = sum(ch in vowels for ch in w) / max(1, len(w))
-        # reward vowel ratio around 35–55%
         vowel_score += max(0.0, 1.0 - abs(v - 0.45) / 0.45)
-    vowel_score *= 0.5
-    return tok_score + vowel_score
+    return tok_score + vowel_score * 0.5
 
 def _tail_noise_penalty(t: str) -> float:
     toks = re.findall(r"[A-Za-z0-9\+\-_]+", t)
     if not toks: 
         return 0.0
     last = toks[-1]
-    # penalize short, all-caps tails (e.g., 'VV', 'VVV')
+    # short, all-caps tail like 'VV'/'VVV' or mixed junk at the end
     if re.fullmatch(r"[A-Z]{2,5}", last):
         return -1.0
     return 0.0
@@ -114,7 +109,7 @@ def smart_hint(text: str):
         return ("lower", lower)
 
     return None
-    
+
 # ---- Candidate ----
 @dataclass
 class Candidate:
@@ -186,32 +181,29 @@ def fitness(t: str) -> float:
     ctlp = _control_penalty(t)
 
     n = len(t)
-    # Length factor: short strings shouldn't dominate. Saturate at 16 chars.
-    len_fac = min(1.0, n / 16.0)
+    # --- define len_fac (the missing piece) ---
+    len_fac = min(1.0, n / 16.0)  # short strings are down-weighted
 
     base = 0.0
-    # Scale most metrics by length factor
     base += (chi * 3.0 + ic * 2.5 + ngr * 1.2 + cls * 1.3) * len_fac
     base += wrd * 0.6 * len_fac
 
-    # Small bonus for explicit word separators
-    base += (t.count(' ') + t.count('_') + t.count('+')) * 0.15
+    # reward readable separators a bit
+    base += (t.count(' ') + t.count('_') + t.count('+')) * 0.25
 
-    # Very short outputs are rarely the answer
+    # tiny anti-short penalty
     if n < 4:  base -= (4 - n) * 2.0
     if n <= 2: base -= 4.0
 
-    # Control characters are a strong negative signal
     base += ctlp
 
-    # Downweight non-printables overall
     if not is_mostly_printable(t):
         base *= 0.6
 
-    # CamelCase helper stays as a side-signal (split to snake and re-score n-grams lightly)
+    # CamelCase → snake signal
     snake = snake_from_camel(t)
     if snake != t.lower():
-        base += ngram_hits(snake) * 0.6 * len_fac
+        base += ngram_hits(snake) * 1.2 * len_fac
 
     base += _tail_noise_penalty(t)
     return base
@@ -235,15 +227,3 @@ def atbash_char(ch: str) -> str:
     if ch.islower(): return LOW[25-LOW.index(ch)]
     if ch.isupper(): return UPP[25-UPP.index(ch)]
     return ch
-
-def fitness(t: str) -> float:
-    base = 0.0
-    base += chi_square_english(t) * 3.0
-    base += index_of_coincidence(t) * 2.5
-    base += ngram_hits(t) * 1.2
-    base += _charclass_score(t) * 1.3   # <--- add this
-    snake = snake_from_camel(t)
-    if snake != t.lower(): base += ngram_hits(snake) * 0.8
-    base += (t.count(' ')+t.count('_')) * 0.1
-    if not is_mostly_printable(t): base *= 0.5
-    return base

@@ -78,5 +78,55 @@
     "name": "base58_random", 
     "cipher": "EJCp8zKavuFuRZNarBkt8zGtHqzm192F1cu8M",
     "expect_contains": ["base58|()random|()delimiter"]
+  },
+  { 
+    "name": "base45_simple", 
+    "cipher": "UJCLQE0R6PQEQ$DTVD",
+    "expect_contains": ["base45simple"]
+  },
+  { 
+    "name": "base45_withspaces", 
+    "cipher": "UJCLQE0R6V44-EDG7DWQE1EC6$C",
+    "expect_contains": ["base45 with spaces"]
+  },
+  { 
+    "name": "base45_withpluses", 
+    "cipher": "UJCLQE0R6CM5-EDR7DP9E7%E6$C",
+    "expect_contains": ["base45+with+pluses"]
+  },
+  { 
+    "name": "base45_underscores", 
+    "cipher": "UJCLQE0R623C0/D5$CJQE04E6$C13C6$CQ2",
+    "expect_contains": ["base45_underscores_test"]
+  },
+  { 
+    "name": "base45_random", 
+    "cipher": "UJCLQE0R6GVF3$4ZA5CECGVC%$DZE5L356VCXVDJ$D7WEO2",
+    "expect_contains": ["base45|*&()random|*&()delimiter"]
+  },
+  { 
+    "name": "base91_simple", 
+    "cipher": "[D7gho|Ry#K)C9M",
+    "expect_contains": ["base91simple"]
+  },
+  { 
+    "name": "base91_withspaces", 
+    "cipher": "[D7ghoHB|%%/1EsoEEWfO[A",
+    "expect_contains": ["base91 with spaces"]
+  },
+  { 
+    "name": "base91_withpluses", 
+    "cipher": "[D7gho}!|%%/fmonY87gO[A",
+    "expect_contains": ["base91+with+pluses"]
+  },
+  { 
+    "name": "base91_underscores", 
+    "cipher": "[D7ghor`5UWz|a2oarzgO[A",
+    "expect_contains": ["base91_underscores"]
+  },
+  { 
+    "name": "base91_random", 
+    "cipher": "[D7gho2)L0mqi*Mopof<|<(vVH27!u7juaLg?[rNH",
+    "expect_contains": ["base91|()^*&random|()^*&delimiter"]
   }
 ]
