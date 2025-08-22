@@ -1,0 +1,26 @@
+{
+  "active_modules": ["base64", "rot13", "super_rot"],
+  "global": {
+    "top_k": 10,
+    "total_budget_s": 600
+  },
+  "modules": {
+    "base64": {
+      "nested_passes": 1,
+      "budget_s": 5.0,
+      "scan_substrings": true,
+      "min_token_len": 16,
+      "allow_urlsafe": true
+    },
+    "rot13": {
+      "n": 13,
+      "budget_s": 1.0
+    },
+    "super_rot": {
+      "max_abs_step": 5,
+      "modes": ["decode", "encode"],
+      "orders": ["LTR", "RTL"],
+      "budget_s": 60.0
+    }
+  }
+}

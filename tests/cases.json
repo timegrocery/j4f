@@ -1,0 +1,8 @@
+[
+  { "name": "b64_simple", "cipher": "aGVsbG9jeWJlcnNlYw==",
+    "expect_contains": ["hello", "cyber"] },
+  { "name": "super_rot_camel", "cipher": "bOnGeWiOsDnYoAxKkAcUrRqOuM",
+    "expect_contains": ["security", "blue", "team", "labs", "online"] },
+  { "name": "embedded_b64", "cipher": "aDMxMTBjfGIzcjUzYw==",
+    "expect_contains": ["h3110c|b3r53c"] }
+]
